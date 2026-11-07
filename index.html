@@ -245,6 +245,10 @@ dialog::backdrop{background:rgba(22,24,29,.45)}
     <label class="lbl" for="modelSel">Model</label>
     <div class="selwrap"><select id="modelSel"></select></div>
    </div>
+   <div>
+    <span class="lbl">Add AI results as</span>
+    <div class="seg" id="addAsSeg"><button type="button" data-v="one" aria-selected="true">One box</button><button type="button" data-v="many" aria-selected="false">Separate boxes</button></div>
+   </div>
    <div class="ctx">Working on <span class="chip" id="ctxChip">—</span></div>
    <div class="quick">
     <button data-ai="expand">Expand ideas</button>
@@ -261,6 +265,10 @@ dialog::backdrop{background:rgba(22,24,29,.45)}
     <div class="field"><span class="lbl" style="margin:0">Branch colour</span><div class="swatches" id="swatches"></div></div>
     <div class="field"><label class="lbl" style="margin:0" for="fLink">Link</label><input class="inp" id="fLink" type="url" placeholder="https://…"></div>
     <div class="field"><label class="lbl" style="margin:0" for="fNote">Note</label><textarea class="inp" id="fNote" rows="4" placeholder="Extra details for this node"></textarea></div>
+    <div class="field" id="fMergeBox"><span class="lbl" style="margin:0">Sub-points</span>
+     <button class="btn" id="fMerge" style="align-self:flex-start">Combine sub-points into one box</button>
+     <span class="small">Puts every point under this node into a single bulleted box.</span>
+    </div>
     <div class="field"><span class="lbl" style="margin:0">Image</span>
      <div class="grp"><button class="btn" id="fImgAdd">Add / replace image</button><button class="btn" id="fImgDel">Remove</button></div>
     </div>
@@ -504,11 +512,12 @@ function wrap(text,s){mctx.font=`${s.fw} ${s.fs}px ${FONT}`;const out=[];for(con
  for(let w of words){while(mctx.measureText(w).width>s.maxW&&w.length>1){let k=w.length-1;while(k>1&&mctx.measureText(w.slice(0,k)).width>s.maxW)k--;if(line){out.push(line);line=''}out.push(w.slice(0,k));w=w.slice(k)}
   const t=line?line+' '+w:w;if(mctx.measureText(t).width>s.maxW&&line){out.push(line);line=w}else line=t}
  out.push(line)}return out.map(t=>({t,w:mctx.measureText(t).width}))}
-function measure(n,d,opts){const s=st(d);const hasImg=n.img&&opts.images!==false&&doc.images[n.img];
- const lines=(n.text||!hasImg)?wrap(n.text||' ',s):[];const lh=Math.round(s.fs*1.35);
+function wrapB(text,s){const out=[];for(const para of String(text).split('\n')){const m=para.match(/^(\s*(?:•|–|-)\s+)/);const lines=wrap(para,s);if(m&&lines.length>1){for(let i=1;i<lines.length;i++){lines[i]={t:'    '+lines[i].t,w:lines[i].w+mctx.measureText('    ').width}}}out.push(...lines)}return out}
+function measure(n,d,opts){const multi=/\n/.test(n.text||'');const s=multi?Object.assign(st(d),{maxW:Math.max(st(d).maxW,300)}):st(d);const hasImg=n.img&&opts.images!==false&&doc.images[n.img];
+ const lines=(n.text||!hasImg)?(multi?wrapB(n.text,s):wrap(n.text||' ',s)):[];const lh=Math.round(s.fs*1.35);
  let w=lines.length?Math.max(...lines.map(l=>l.w)):0,h=lines.length*lh,img=null;
  if(hasImg){const I=doc.images[n.img];let iw=Math.min(d===0?240:180,I.w),ih=iw*I.h/I.w;if(ih>150){ih=150;iw=ih*I.w/I.h}img={w:iw,h:ih};w=Math.max(w,iw);h+=ih+(lines.length?8:0)}
- w=Math.max(Math.ceil(w)+s.px*2,d===0?120:56);h=Math.ceil(h)+s.py*2;return {w,h,lines,lh,s,img}}
+ w=Math.max(Math.ceil(w)+s.px*2,d===0?120:56);h=Math.ceil(h)+s.py*2;return {w,h,lines,lh,s,img,left:multi}}
 function layout(opts={}){const P=new Map(),SH=new Map();const vis=n=>n.collapsed?[]:n.children;
  const m=n=>{let p=P.get(n.id);if(!p){p=measure(n,depthOf.get(n.id),opts);P.set(n.id,p)}return p};
  const gap=n=>depthOf.get(n.id)===0?28:12;
@@ -539,8 +548,8 @@ function drawNode(g,n,p,opts){const d=depthOf.get(n.id),x=p.x-p.w/2,y=p.y-p.h/2,
  let ty=y+s.py;
  if(p.img){const I=doc.images[n.img];const cid='c'+n.id+(opts.interactive?'':'x');const cp=el('clipPath',{id:cid},grp);el('rect',{x:p.x-p.img.w/2,y:ty,width:p.img.w,height:p.img.h,rx:6},cp);
   el('image',{href:I.data,x:p.x-p.img.w/2,y:ty,width:p.img.w,height:p.img.h,preserveAspectRatio:'xMidYMid slice','clip-path':`url(#${cid})`},grp);ty+=p.img.h+(p.lines.length?8:0)}
- if(p.lines.length){const t=el('text',{'text-anchor':'middle','font-family':FONT,'font-size':s.fs,'font-weight':s.fw,fill:tc},grp);
-  p.lines.forEach((l,i)=>{const ts=el('tspan',{x:p.x,y:(ty+i*p.lh+(p.lh-s.fs)/2+s.fs*.84).toFixed(1)},t);ts.textContent=l.t})}
+ if(p.lines.length){const tx=p.left?x+s.px:p.x;const t=el('text',{'text-anchor':p.left?'start':'middle','font-family':FONT,'font-size':s.fs,'font-weight':s.fw,fill:tc},grp);
+  p.lines.forEach((l,i)=>{const ts=el('tspan',{x:tx,y:(ty+i*p.lh+(p.lh-s.fs)/2+s.fs*.84).toFixed(1)},t);ts.textContent=l.t})}
  let bx=x+p.w-2;const badge=(ch,col,link)=>{const b=el('g',link&&opts.interactive?{'data-link':'1','data-nid':n.id}:{},grp);el('circle',{cx:bx,cy:y+1,r:9,fill:'#FFFFFF',stroke:col,'stroke-width':1.5},b);const t=el('text',{x:bx,y:y+5,'text-anchor':'middle','font-family':FONT,'font-size':11,'font-weight':700,fill:col},b);t.textContent=ch;bx-=22};
  if(n.link)badge('↗','#2F5BEA',true);if(n.note)badge('i','#B45309');
  if(n.children.length&&d>0){const cx=p.x+p.dir*(p.w/2+11);
@@ -560,7 +569,7 @@ function ensureVisible(id){const p=L.get(id);if(!p)return;const r=svg.getBoundin
 function select(id){sel=id;render();refreshSide()}
 const inSub=(id,rootId)=>{let n=byId.get(id);while(n){if(n.id===rootId)return true;n=parentOf.get(n.id)}return false};
 function placeEditor(){const p=L.get(editing.id);if(!p){cancelEdit();return}const z=view.z,w=Math.max(p.w*z,160);
- ed.style.fontSize=(p.s.fs*z)+'px';ed.style.fontWeight=p.s.fw;ed.style.width=w+'px';ed.style.left=(view.x+p.x*z-w/2)+'px';ed.style.top=(view.y+(p.y-p.h/2)*z)+'px';
+ ed.style.textAlign=p.left?'left':'center';ed.style.fontSize=(p.s.fs*z)+'px';ed.style.fontWeight=p.s.fw;ed.style.width=w+'px';ed.style.left=(view.x+p.x*z-w/2)+'px';ed.style.top=(view.y+(p.y-p.h/2)*z)+'px';
  ed.style.height='auto';ed.style.height=Math.max(ed.scrollHeight,p.h*z)+'px'}
 function startEdit(id,initial){const n=byId.get(id);if(!n)return;ensureVisible(id);editing={id,orig:n.text};ed.value=initial??n.text;ed.style.display='block';placeEditor();ed.focus();if(initial==null)ed.select();else{ed.selectionStart=ed.selectionEnd=ed.value.length}}
 function commitEdit(){if(!editing)return;const e=editing;editing=null;ed.style.display='none';const n=byId.get(e.id);if(!n)return;const v=ed.value.replace(/\s+$/,'').replace(/^\s+/,'');
@@ -675,9 +684,12 @@ function refreshSide(){const n=byId.get(sel);$('#ctxChip').textContent=n?(n.text
  $('#styleEmpty').hidden=!!n;$('#styleForm').hidden=!n;$('#styleForm').style.display=n?'flex':'none';if(!n)return;
  const sw=$('#swatches');sw.replaceChildren();const auto=document.createElement('button');auto.className='sw auto';auto.setAttribute('aria-label','Automatic colour');auto.setAttribute('aria-pressed',!n.color);auto.onclick=()=>act(()=>{delete n.color});sw.appendChild(auto);
  for(const c of PALETTE.concat(['#16181D'])){const b=document.createElement('button');b.className='sw';b.style.background=c;b.setAttribute('aria-label','Colour '+c);b.setAttribute('aria-pressed',n.color===c);b.onclick=()=>act(()=>{n.color=c});sw.appendChild(b)}
- if(document.activeElement!==$('#fLink'))$('#fLink').value=n.link||'';if(document.activeElement!==$('#fNote'))$('#fNote').value=n.note||'';$('#fImgDel').disabled=!n.img}
+ if(document.activeElement!==$('#fLink'))$('#fLink').value=n.link||'';if(document.activeElement!==$('#fNote'))$('#fNote').value=n.note||'';$('#fImgDel').disabled=!n.img;$('#fMergeBox').hidden=!n.children.length}
 $('#fLink').addEventListener('change',e=>{const n=byId.get(sel);if(!n)return;let v=e.target.value.trim();if(v&&!/^[a-z]+:/i.test(v))v='https://'+v;act(()=>{if(v)n.link=v;else delete n.link})});
 $('#fNote').addEventListener('change',e=>{const n=byId.get(sel);if(!n)return;const v=e.target.value;act(()=>{if(v.trim())n.note=v;else delete n.note})});
+$('#fMerge').onclick=()=>{const n=byId.get(sel);if(!n||!n.children.length)return;const items=(function cv(list){return list.map(c=>({text:(c.text||'(photo)'),children:cv(c.children)}))})(n.children);
+ const imgs=[];(function w(l){for(const c of l){if(c.img)imgs.push(c);w(c.children)}})(n.children);
+ act(()=>{const box=newNode(flat(items).join('\n'));n.children=[box,...imgs.map(c=>{const k=newNode(c.text);k.img=c.img;return k})];n.collapsed=false;sel=box.id});toast('Combined into one box (Undo to revert)')};
 $('#fImgAdd').onclick=()=>{if(sel)pickImage('replace')};
 $('#fImgDel').onclick=()=>{const n=byId.get(sel);if(n&&n.img)act(()=>{delete n.img;if(!n.text)n.text='Photo'})};
 
@@ -744,7 +756,7 @@ $('#btnPhone').onclick=openPair;
 $('#pairLocal').onclick=()=>{$('#dPair').close();if(!sel)sel=doc.root.id;pickImage($('#pairTarget').value==='root'?'root':'child')};
 
 /* ---------- Gemini AI ---------- */
-let S={key:'',model:'',models:[],fallback:true};try{Object.assign(S,JSON.parse(lsGet(KEY_S)||'{}'))}catch(_){}
+let S={key:'',model:'',models:[],fallback:true,addAs:'one'};try{Object.assign(S,JSON.parse(lsGet(KEY_S)||'{}'))}catch(_){}
 const saveS=()=>{try{lsSet(KEY_S,JSON.stringify(S))}catch(_){}};
 const API='https://generativelanguage.googleapis.com/v1beta/';
 const ver=id=>{const m=id.match(/gemini-(\d+(?:\.\d+)?)/);return m?parseFloat(m[1]):0};
@@ -793,13 +805,25 @@ function thinking(){const b=bubble('ai');const s=document.createElement('span');
 function failed(b,err){b.className='bub err';b.replaceChildren(document.createTextNode(err.message||String(err)))}
 function addTree(parent,items,depth=0){let c=0;if(!Array.isArray(items)||depth>4)return 0;for(const it of items.slice(0,12)){const t=typeof it==='string'?it:(it&&(it.text||it.title||it.name));if(!t)continue;const n=newNode(String(t).slice(0,120));parent.children.push(n);c++;if(it&&typeof it==='object')c+=addTree(n,it.children||it.subtopics||[],depth+1)}return c}
 function aiTarget(){return byId.get(sel)||doc.root}
+const itText=it=>typeof it==='string'?it:(it&&(it.text||it.title||it.name));
+const itKids=it=>(it&&typeof it==='object'&&(it.children||it.subtopics))||[];
+function flat(items,depth=0,out=[]){if(!Array.isArray(items))return out;for(const it of items.slice(0,25)){const t=itText(it);if(!t)continue;out.push((depth?'   '.repeat(depth-1)+'– ':'• ')+String(t).trim().replace(/\s+/g,' ').slice(0,300));flat(itKids(it),depth+1,out)}return out}
+function addAI(parent,items){if(S.addAs==='many')return addTree(parent,items);if(!Array.isArray(items))return 0;
+ const leaves=[],branches=[];for(const it of items){if(!itText(it))continue;(itKids(it).length?branches:leaves).push(it)}
+ let c=0;if(leaves.length){parent.children.push(newNode(flat(leaves).join('\n')));c++}
+ for(const b of branches.slice(0,12)){const n=newNode(String(itText(b)).slice(0,120));const box=flat(itKids(b));if(box.length)n.children.push(newNode(box.join('\n')));parent.children.push(n);c++}
+ return c}
+const unitWord=c=>S.addAs==='many'?(c+' nodes'):(c===1?'1 box':c+' boxes');
+function syncAddAs(){$$('#addAsSeg button').forEach(b=>b.setAttribute('aria-selected',b.dataset.v===(S.addAs||'one')))}
+$$('#addAsSeg button').forEach(b=>b.onclick=()=>{S.addAs=b.dataset.v;saveS();syncAddAs();toast(S.addAs==='one'?'AI results will go into one box':'AI results will be separate boxes')});
+syncAddAs();
 async function expand(){const n=aiTarget();bubble('me','Suggest sub-topics for “'+(n.text||'this photo')+'”');const b=thinking();
  try{const arr=parseJSON(await gemini([{text:`You help build mind maps. Current map:\n${outline()}\n\nSuggest 5 to 7 new, specific sub-topics for the node "${n.text||'photo'}". Each at most 6 words. Do not repeat existing children. Reply ONLY as a JSON array of strings.`}],true));
   const list=(Array.isArray(arr)?arr:arr.items||arr.subtopics||[]).map(x=>typeof x==='string'?x:x&&x.text).filter(Boolean).slice(0,10);if(!list.length)throw new Error('No ideas came back. Try again.');
   b.replaceChildren();const h=document.createElement('span');h.textContent='Pick the ideas to add under “'+(n.text||'photo')+'”:';b.appendChild(h);
   const boxes=list.map(t=>{const l=document.createElement('label');l.className='pick';const c=document.createElement('input');c.type='checkbox';c.checked=true;l.append(c,document.createTextNode(String(t).slice(0,120)));b.appendChild(l);return {c,t}});
-  const acts=document.createElement('div');acts.className='acts';const add=document.createElement('button');add.className='btn pri';const upd=()=>{const k=boxes.filter(x=>x.c.checked).length;add.textContent='Add '+k+' to map';add.disabled=!k};upd();boxes.forEach(x=>x.c.onchange=upd);
-  add.onclick=()=>{const pick=boxes.filter(x=>x.c.checked).map(x=>x.t);if(!byId.has(n.id)){toast('That node no longer exists');return}act(()=>{n.collapsed=false;addTree(n,pick)});add.disabled=true;add.textContent='Added ✓'};
+  const acts=document.createElement('div');acts.className='acts';const add=document.createElement('button');add.className='btn pri';const upd=()=>{const k=boxes.filter(x=>x.c.checked).length;add.textContent=S.addAs==='many'?'Add '+k+' to map':'Add '+k+' in one box';add.disabled=!k};upd();boxes.forEach(x=>x.c.onchange=upd);
+  add.onclick=()=>{const pick=boxes.filter(x=>x.c.checked).map(x=>x.t);if(!byId.has(n.id)){toast('That node no longer exists');return}act(()=>{n.collapsed=false;addAI(n,pick)});add.disabled=true;add.textContent='Added ✓'};
   const again=document.createElement('button');again.className='btn';again.textContent='Regenerate';again.onclick=()=>{sel=n.id;expand()};acts.append(add,again);b.appendChild(acts)}
  catch(err){failed(b,err)}}
 async function summary(){bubble('me','Summarise my map');const b=thinking();try{const t=await gemini([{text:`Summarise this mind map in 4 to 6 short bullet points using "•", then one line with the single most important next step.\n\n${outline()}`}]);b.replaceChildren(document.createTextNode(t.trim()))}catch(err){failed(b,err)}}
@@ -807,20 +831,20 @@ async function topicMap(){const q=$('#askIn').value.trim();const n=aiTarget();co
  bubble('me','Make a mind map about: '+topic);const b=thinking();
  try{const j=parseJSON(await gemini([{text:`Create a mind map about "${topic}". Return ONLY JSON: {"text": "<central topic, max 6 words>", "children": [{"text": "...", "children": [{"text":"..."}]}]}. 4 to 7 main branches, 2 to 4 sub-points each, max 3 levels, each label max 7 words.`}],true));
   const kids=j.children||(Array.isArray(j)?j:[]);let count=0;
-  act(()=>{const isBlank=doc.root.children.length===0;const target=isBlank?doc.root:n;if(isBlank&&j.text){doc.root.text=String(j.text).slice(0,120);if(doc.title==='Untitled map'){doc.title=doc.root.text;$('#title').value=doc.title}}target.collapsed=false;count=addTree(target,kids)});
-  b.replaceChildren(document.createTextNode('Added '+count+' nodes under “'+(byId.get(n.id)?n.text:doc.root.text)+'”. Use Undo if you don’t like them.'));setTimeout(fit,50)}catch(err){failed(b,err)}}
+  act(()=>{const isBlank=doc.root.children.length===0;const target=isBlank?doc.root:n;if(isBlank&&j.text){doc.root.text=String(j.text).slice(0,120);if(doc.title==='Untitled map'){doc.title=doc.root.text;$('#title').value=doc.title}}target.collapsed=false;count=addAI(target,kids)});
+  b.replaceChildren(document.createTextNode('Added '+unitWord(count)+' under “'+(byId.get(n.id)?n.text:doc.root.text)+'”. Use Undo if you don’t like them.'));setTimeout(fit,50)}catch(err){failed(b,err)}}
 async function photoMap(nid){const n=byId.get(nid||sel);if(!n||!n.img||!doc.images[n.img]){if(!sel)sel=doc.root.id;toast('Choose a photo of notes, a whiteboard or a page');imgMode='ai';$('#fileImg').click();return}
  bubble('me','Turn this photo into a mind map');const b=thinking();const I=doc.images[n.img];const m=I.data.match(/^data:(image\/[a-z]+);base64,(.*)$/);
  try{const j=parseJSON(await gemini([{inline_data:{mime_type:m[1],data:m[2]}},{text:'Read this image (notes, a whiteboard, a textbook page or a diagram). Turn its content into a mind map. Return ONLY JSON: {"text": "<main topic, max 6 words>", "children": [{"text":"...", "children":[{"text":"..."}]}]}. Keep labels short (max 7 words). Max 3 levels.'}],true));
-  let count=0;act(()=>{if(!n.text&&j.text)n.text=String(j.text).slice(0,120);n.collapsed=false;count=addTree(n,j.children||[])});
-  b.replaceChildren(document.createTextNode('Read the photo and added '+count+' nodes under “'+(n.text||'photo')+'”.'));ensureVisible(n.id)}catch(err){failed(b,err)}}
+  let count=0;act(()=>{if(!n.text&&j.text)n.text=String(j.text).slice(0,120);n.collapsed=false;count=addAI(n,j.children||[])});
+  b.replaceChildren(document.createTextNode('Read the photo and added '+unitWord(count)+' under “'+(n.text||'photo')+'”.'));ensureVisible(n.id)}catch(err){failed(b,err)}}
 // when user picks a file for AI photo mapping
 const origImgChange=$('#fileImg').onchange;$('#fileImg').onchange=async e=>{if(imgMode!=='ai')return origImgChange(e);const f=e.target.files[0];e.target.value='';if(!f)return;try{const r=await imageFromFile(f);const nid=await placeImage(r,'child');photoMap(nid)}catch(err){toast(err.message)}};
 async function freeAsk(q){bubble('me',q);const b=thinking();const n=aiTarget();
  try{const t=await gemini([{text:`You are an assistant inside a mind map app. The user's map:\n${outline()}\n\nSelected node: "${n.text||'photo'}".\nAnswer briefly and clearly. If you suggest new ideas, put each on its own line starting with "- ".\n\nUser: ${q}`}]);
   b.replaceChildren(document.createTextNode(t.trim()));const items=t.split('\n').map(l=>l.match(/^\s*(?:[-*•]|\d+[.)])\s+(.+)/)).filter(Boolean).map(m=>m[1].replace(/\*\*/g,'').trim()).filter(x=>x.length<=120);
-  if(items.length){const acts=document.createElement('div');acts.className='acts';const add=document.createElement('button');add.className='btn';add.textContent='Add '+items.length+' as nodes under “'+(n.text||'photo').slice(0,24)+'”';
-   add.onclick=()=>{if(!byId.has(n.id))return;act(()=>{n.collapsed=false;addTree(n,items)});add.disabled=true;add.textContent='Added ✓'};acts.appendChild(add);b.appendChild(acts)}}
+  if(items.length){const acts=document.createElement('div');acts.className='acts';const add=document.createElement('button');add.className='btn';add.textContent=(S.addAs==='many'?'Add '+items.length+' as nodes':'Add as one box')+' under “'+(n.text||'photo').slice(0,24)+'”';
+   add.onclick=()=>{if(!byId.has(n.id))return;act(()=>{n.collapsed=false;addAI(n,items)});add.disabled=true;add.textContent='Added ✓'};acts.appendChild(add);b.appendChild(acts)}}
  catch(err){failed(b,err)}}
 $$('[data-ai]').forEach(btn=>btn.onclick=()=>{const a=btn.dataset.ai;if(!S.key){openSettings();return}if(a==='expand')expand();else if(a==='summary')summary();else if(a==='topic')topicMap();else if(a==='photo')photoMap()});
 $('#askForm').onsubmit=e=>{e.preventDefault();const q=$('#askIn').value.trim();if(!q)return;if(!S.key){openSettings();return}$('#askIn').value='';freeAsk(q)};
