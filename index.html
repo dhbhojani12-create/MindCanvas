@@ -72,6 +72,17 @@ svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke
 #aiPop textarea{flex:1;border:0;outline:0;resize:none;font-size:13px;max-height:100px;background:transparent}
 #aiPop .busy{font-size:13px;color:#3A3F4B;padding:6px 2px}
 #aiPop .err{font-size:12px;color:#B42318}
+#viewer{position:fixed;inset:0;z-index:40;background:#0E0F12;display:none;flex-direction:column}
+#viewer.on{display:flex}
+#viewer .vbar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;color:#fff;flex-wrap:wrap}
+#viewer .vbar b{font-size:14px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:50vw}
+#viewer .vbar .grp button{height:38px;min-width:38px;border:0;border-radius:9px;background:rgba(255,255,255,.12);color:#fff;font-size:16px;padding:0 10px;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+#viewer .vbar .grp button:hover{background:rgba(255,255,255,.22)}
+#viewer .vbar .grp span{min-width:56px;text-align:center;font-size:13px}
+#vStage{flex:1;position:relative;overflow:hidden;touch-action:none;cursor:grab}
+#vStage.drag{cursor:grabbing}
+#vImg{position:absolute;left:0;top:0;transform-origin:0 0;user-select:none;-webkit-user-drag:none;max-width:none;image-rendering:auto;box-shadow:0 10px 40px rgba(0,0,0,.4);background:#fff}
+#viewer .vhint{color:rgba(255,255,255,.7);font-size:12px;text-align:center;padding:8px}
 #drop{position:absolute;inset:12px;border:3px dashed var(--blue);border-radius:16px;background:rgba(47,91,234,.06);display:none;align-items:center;justify-content:center;font-weight:600;color:var(--blue2);pointer-events:none;font-size:18px}
 #side{width:330px;flex-shrink:0;background:#fff;border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
 #side.hide{display:none}
@@ -236,6 +247,7 @@ dialog::backdrop{background:rgba(22,24,29,.45)}
    <button type="button" class="ai" id="nbAI" title="Ask AI about this box"><svg class="i" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>Ask AI</button>
    <button type="button" id="nbChild" aria-label="Add child" title="Add child (Tab)"><svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M12 5v14M5 12h14"/></svg></button>
    <button type="button" id="nbEdit" aria-label="Edit text" title="Edit text"><svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>
+   <button type="button" id="nbView" aria-label="View photo full size" title="View photo full size (double-click photo)"><svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5M11 8v6M8 11h6"/></svg></button>
    <button type="button" id="nbImg" aria-label="Add image" title="Add image"><svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M21 16l-5-5-8 8"/></svg></button>
   </div>
   <form id="aiPop" aria-label="Ask AI about this box">
@@ -308,6 +320,11 @@ dialog::backdrop{background:rgba(22,24,29,.45)}
     </div>
     <div class="field"><span class="lbl" style="margin:0">Image</span>
      <div class="grp"><button class="btn" id="fImgAdd">Add / replace image</button><button class="btn" id="fImgDel">Remove</button></div>
+     <div id="fImgOpts" style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+      <span class="small" style="font-size:12px">Photo size on the map</span>
+      <div class="seg" id="fImgSize"><button type="button" data-v="s">Small</button><button type="button" data-v="m">Medium</button><button type="button" data-v="l">Large</button></div>
+      <button class="btn" id="fImgView" style="align-self:flex-start">View full size</button>
+     </div>
     </div>
    </div>
   </div>
@@ -439,6 +456,14 @@ dialog::backdrop{background:rgba(22,24,29,.45)}
 
 <input type="file" id="fileImg" accept="image/*" hidden>
 <input type="file" id="fileJson" accept=".json,application/json" hidden>
+<div id="viewer" role="dialog" aria-label="Photo viewer">
+ <div class="vbar"><b id="vTitle">Photo</b>
+  <div class="grp"><button type="button" id="vOut" aria-label="Zoom out">−</button><span id="vPct">100%</span><button type="button" id="vIn" aria-label="Zoom in">+</button>
+   <button type="button" id="vFit">Fit</button><button type="button" id="v100">100%</button><button type="button" id="vDl" aria-label="Download photo"><svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></button>
+   <button type="button" id="vClose" aria-label="Close" style="background:#fff;color:#16181D"><svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div></div>
+ <div id="vStage"><img id="vImg" alt="Photo"></div>
+ <div class="vhint">Scroll or pinch to zoom · drag to move · double-click to zoom in · Esc to close</div>
+</div>
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -457,7 +482,7 @@ let toastT;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add
 /* ---------- Image helpers ---------- */
 function readFileAsDataURL(f){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsDataURL(f)})}
 function loadImg(src){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error('Could not read that image'));i.src=src})}
-async function compress(src,max=1600,rot=0){const im=await loadImg(src);let w=im.naturalWidth,h=im.naturalHeight;const s=Math.min(1,max/Math.max(w,h));w=Math.round(w*s);h=Math.round(h*s);const c=document.createElement('canvas');const r=((rot%360)+360)%360;c.width=(r%180)?h:w;c.height=(r%180)?w:h;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.translate(c.width/2,c.height/2);x.rotate(r*Math.PI/180);x.drawImage(im,-w/2,-h/2,w,h);return {data:c.toDataURL('image/jpeg',.82),w:c.width,h:c.height}}
+async function compress(src,max=2200,rot=0){const im=await loadImg(src);let w=im.naturalWidth,h=im.naturalHeight;const s=Math.min(1,max/Math.max(w,h));w=Math.round(w*s);h=Math.round(h*s);const c=document.createElement('canvas');const r=((rot%360)+360)%360;c.width=(r%180)?h:w;c.height=(r%180)?w:h;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.translate(c.width/2,c.height/2);x.rotate(r*Math.PI/180);x.drawImage(im,-w/2,-h/2,w,h);return {data:c.toDataURL('image/jpeg',.86),w:c.width,h:c.height}}
 
 /* ================= PHONE MODE ================= */
 const params=new URLSearchParams(location.search);
@@ -488,13 +513,13 @@ function startPhone(){
   if(window.Peer)go();else window.addEventListener('load',go,{once:true});
  }
  const cv=$('#phCanvas');
- async function show(){if(!src)return;const r=await compress(src,1600,rot);const im=await loadImg(r.data);cv.width=r.w;cv.height=r.h;cv.getContext('2d').drawImage(im,0,0);cv.style.display='block';$('#phCamIco').style.display='none';$('#phHint').style.display='none';$('#phTools').style.display='flex';upd()}
+ async function show(){if(!src)return;const r=await compress(src,2200,rot);const im=await loadImg(r.data);cv.width=r.w;cv.height=r.h;cv.getContext('2d').drawImage(im,0,0);cv.style.display='block';$('#phCamIco').style.display='none';$('#phHint').style.display='none';$('#phTools').style.display='flex';upd()}
  function upd(){$('#phSend').disabled=!(src&&conn&&conn.open)}
  async function pick(e){const f=e.target.files[0];e.target.value='';if(!f)return;try{src=await readFileAsDataURL(f);rot=0;await show()}catch(err){toast(err.message)}}
  $('#phCam').onchange=pick;$('#phGal').onchange=pick;
  $('#phRot').onclick=()=>{rot=(rot+90)%360;show()};
  $('#phSend').onclick=async()=>{if(!src||!conn||!conn.open)return;$('#phSend').disabled=true;$('#phSend').lastChild.textContent='Sending…';
-  try{const r=await compress(src,1600,rot);conn.send({type:'photo',data:r.data,w:r.w,h:r.h,caption:$('#phCap').value.trim().slice(0,80),ai:$('#phAI').checked});
+  try{const r=await compress(src,2200,rot);conn.send({type:'photo',data:r.data,w:r.w,h:r.h,caption:$('#phCap').value.trim().slice(0,80),ai:$('#phAI').checked});
    toast('Sent ✓ Take another if you like');src=null;cv.style.display='none';$('#phCamIco').style.display='';$('#phHint').style.display='';$('#phHint').textContent='Sent ✓ Take another photo';$('#phTools').style.display='none';$('#phCap').value=''}
   catch(err){toast('Could not send: '+err.message)}
   $('#phSend').lastChild.textContent='Send to laptop';upd()};
@@ -517,7 +542,7 @@ function starter(){const n=t=>({id:uid(),text:t,children:[]});const r=n('My mind
 function cleanNode(n,depth=0){if(!n||typeof n!=='object'||depth>60)return null;const o={id:typeof n.id==='string'&&n.id?n.id.slice(0,40):uid(),text:String(n.text??'').slice(0,2000),children:[]};
  if(typeof n.color==='string'&&/^#[0-9a-fA-F]{6}$/.test(n.color))o.color=n.color;
  if(typeof n.link==='string')o.link=n.link.slice(0,2000);if(typeof n.note==='string')o.note=n.note.slice(0,10000);
- if(typeof n.img==='string')o.img=n.img.slice(0,40);if(n.collapsed)o.collapsed=true;
+ if(typeof n.img==='string')o.img=n.img.slice(0,40);if(n.imgSize==='m'||n.imgSize==='l')o.imgSize=n.imgSize;if(n.collapsed)o.collapsed=true;
  if(n.side==='L'||n.side==='R')o.side=n.side;if(Number.isFinite(n.dx))o.dx=n.dx;if(Number.isFinite(n.dy))o.dy=n.dy;
  if(Array.isArray(n.children))for(const c of n.children){const k=cleanNode(c,depth+1);if(k)o.children.push(k)}return o}
 function cleanDoc(d){const root=cleanNode(d&&d.root);if(!root)return null;const images={};
@@ -553,7 +578,7 @@ function wrapB(text,s){const out=[];for(const para of String(text).split('\n')){
 function measure(n,d,opts){const multi=/\n/.test(n.text||'');const s=multi?Object.assign(st(d),{maxW:Math.max(st(d).maxW,300)}):st(d);const hasImg=n.img&&opts.images!==false&&doc.images[n.img];
  const lines=(n.text||!hasImg)?(multi?wrapB(n.text,s):wrap(n.text||' ',s)):[];const lh=Math.round(s.fs*1.35);
  let w=lines.length?Math.max(...lines.map(l=>l.w)):0,h=lines.length*lh,img=null;
- if(hasImg){const I=doc.images[n.img];let iw=Math.min(d===0?240:180,I.w),ih=iw*I.h/I.w;if(ih>150){ih=150;iw=ih*I.w/I.h}img={w:iw,h:ih};w=Math.max(w,iw);h+=ih+(lines.length?8:0)}
+ if(hasImg){const I=doc.images[n.img];const SZ={s:[180,150],m:[340,280],l:[560,460]}[n.imgSize||'s'];let iw=Math.min(n.imgSize?SZ[0]:(d===0?240:180),I.w),ih=iw*I.h/I.w;if(ih>SZ[1]){ih=SZ[1];iw=ih*I.w/I.h}img={w:iw,h:ih};w=Math.max(w,iw);h+=ih+(lines.length?8:0)}
  w=Math.max(Math.ceil(w)+s.px*2,d===0?120:56);h=Math.ceil(h)+s.py*2;return {w,h,lines,lh,s,img,left:multi}}
 function layout(opts={}){const P=new Map(),SH=new Map();const vis=n=>n.collapsed?[]:n.children;
  const m=n=>{let p=P.get(n.id);if(!p){p=measure(n,depthOf.get(n.id),opts);P.set(n.id,p)}return p};
@@ -597,7 +622,7 @@ function render(){index();L=layout();world.replaceChildren();draw(world,L,{inter
 function applyView(){world.setAttribute('transform',`translate(${view.x} ${view.y}) scale(${view.z})`);$('#zoomPct').textContent=Math.round(view.z*100)+'%';if(editing)placeEditor();placeBar()}
 function bounds(P,only){let a=Infinity,b=Infinity,c=-Infinity,d=-Infinity;for(const [id,p] of P){if(only&&!only.has(id))continue;a=Math.min(a,p.x-p.w/2-24);b=Math.min(b,p.y-p.h/2-14);c=Math.max(c,p.x+p.w/2+24);d=Math.max(d,p.y+p.h/2+14)}return {x:a,y:b,w:c-a,h:d-b}}
 function fit(){const r=svg.getBoundingClientRect(),B=bounds(L);const z=Math.max(.15,Math.min(1.4,Math.min(r.width/B.w,r.height/B.h)*.9));view.z=z;view.x=r.width/2-(B.x+B.w/2)*z;view.y=r.height/2-(B.y+B.h/2)*z;applyView()}
-function zoomAt(cx,cy,f){const r=svg.getBoundingClientRect(),z=Math.max(.15,Math.min(3,view.z*f)),k=z/view.z;const px=cx-r.left,py=cy-r.top;view.x=px-(px-view.x)*k;view.y=py-(py-view.y)*k;view.z=z;applyView()}
+function zoomAt(cx,cy,f){const r=svg.getBoundingClientRect(),z=Math.max(.15,Math.min(10,view.z*f)),k=z/view.z;const px=cx-r.left,py=cy-r.top;view.x=px-(px-view.x)*k;view.y=py-(py-view.y)*k;view.z=z;applyView()}
 function toWorld(cx,cy){const r=svg.getBoundingClientRect();return {x:(cx-r.left-view.x)/view.z,y:(cy-r.top-view.y)/view.z}}
 function ensureVisible(id){const p=L.get(id);if(!p)return;const r=svg.getBoundingClientRect();const sx=view.x+p.x*view.z,sy=view.y+p.y*view.z,m=80;
  if(sx<m)view.x+=m-sx;if(sx>r.width-m)view.x-=sx-(r.width-m);if(sy<m)view.y+=m-sy;if(sy>r.height-m)view.y-=sy-(r.height-m);applyView()}
@@ -633,7 +658,7 @@ function nav(key){const n=byId.get(sel);if(!n){select(doc.root.id);return}const 
 
 /* ---------- Images ---------- */
 async function addImageData(data,w,h){const id=uid();doc.images[id]={data,w,h};return id}
-async function imageFromFile(f){const raw=await readFileAsDataURL(f);return compress(raw,1600)}
+async function imageFromFile(f){const raw=await readFileAsDataURL(f);return compress(raw,2200)}
 let imgMode='child';
 function pickImage(mode){imgMode=mode;$('#fileImg').click()}
 $('#fileImg').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{const r=await imageFromFile(f);await placeImage(r,imgMode)}catch(err){toast(err.message)}};
@@ -676,7 +701,7 @@ function finishDrag(e){const n=byId.get(drag.id);
  dropTarget=null;changed()}
 function endPtr(e){pts.delete(e.pointerId);if(pts.size<2)pinch=null;svg.classList.remove('panning');if(!drag)return;if(drag.type==='node'&&drag.moved)finishDrag(e);drag=null;placeBar()}
 svg.addEventListener('pointerup',endPtr);svg.addEventListener('pointercancel',endPtr);
-svg.addEventListener('dblclick',e=>{const w=toWorld(e.clientX,e.clientY);let hit=null;for(const [id,p] of L){if(Math.abs(w.x-p.x)<=p.w/2&&Math.abs(w.y-p.y)<=p.h/2){hit=id}}if(hit){sel=hit;startEdit(hit)}else{sel=doc.root.id;addChild()}});
+svg.addEventListener('dblclick',e=>{const w=toWorld(e.clientX,e.clientY);let hit=null;for(const [id,p] of L){if(Math.abs(w.x-p.x)<=p.w/2&&Math.abs(w.y-p.y)<=p.h/2){hit=id}}if(hit){sel=hit;const hn=byId.get(hit),hp=L.get(hit);if(hp.img&&w.y<=hp.y-hp.h/2+hp.s.py+hp.img.h+2){openViewer(hit);return}startEdit(hit)}else{sel=doc.root.id;addChild()}});
 svg.addEventListener('wheel',e=>{e.preventDefault();if(e.ctrlKey||!e.shiftKey&&Math.abs(e.deltaX)<1&&e.deltaMode!==0||!e.shiftKey&&Math.abs(e.deltaY)>=50&&Math.abs(e.deltaX)<1){zoomAt(e.clientX,e.clientY,Math.exp(-e.deltaY*(e.ctrlKey?.01:.0015)))}else{view.x-=e.deltaX;view.y-=e.deltaY;applyView()}},{passive:false});
 $('#zIn').onclick=()=>{const r=svg.getBoundingClientRect();zoomAt(r.left+r.width/2,r.top+r.height/2,1.2)};
 $('#zOut').onclick=()=>{const r=svg.getBoundingClientRect();zoomAt(r.left+r.width/2,r.top+r.height/2,1/1.2)};
@@ -721,7 +746,7 @@ function refreshSide(){const n=byId.get(sel);$('#ctxChip').textContent=n?(n.text
  $('#styleEmpty').hidden=!!n;$('#styleForm').hidden=!n;$('#styleForm').style.display=n?'flex':'none';if(!n)return;
  const sw=$('#swatches');sw.replaceChildren();const auto=document.createElement('button');auto.className='sw auto';auto.setAttribute('aria-label','Automatic colour');auto.setAttribute('aria-pressed',!n.color);auto.onclick=()=>act(()=>{delete n.color});sw.appendChild(auto);
  for(const c of PALETTE.concat(['#16181D'])){const b=document.createElement('button');b.className='sw';b.style.background=c;b.setAttribute('aria-label','Colour '+c);b.setAttribute('aria-pressed',n.color===c);b.onclick=()=>act(()=>{n.color=c});sw.appendChild(b)}
- if(document.activeElement!==$('#fLink'))$('#fLink').value=n.link||'';if(document.activeElement!==$('#fNote'))$('#fNote').value=n.note||'';$('#fImgDel').disabled=!n.img;$('#fMergeBox').hidden=!n.children.length}
+ if(document.activeElement!==$('#fLink'))$('#fLink').value=n.link||'';if(document.activeElement!==$('#fNote'))$('#fNote').value=n.note||'';$('#fImgDel').disabled=!n.img;$('#fImgOpts').hidden=!n.img;$$('#fImgSize button').forEach(b=>b.setAttribute('aria-selected',b.dataset.v===(n.imgSize||'s')));$('#fMergeBox').hidden=!n.children.length}
 $('#fLink').addEventListener('change',e=>{const n=byId.get(sel);if(!n)return;let v=e.target.value.trim();if(v&&!/^[a-z]+:/i.test(v))v='https://'+v;act(()=>{if(v)n.link=v;else delete n.link})});
 $('#fNote').addEventListener('change',e=>{const n=byId.get(sel);if(!n)return;const v=e.target.value;act(()=>{if(v.trim())n.note=v;else delete n.note})});
 $('#fMerge').onclick=()=>{const n=byId.get(sel);if(!n||!n.children.length)return;const items=(function cv(list){return list.map(c=>({text:(c.text||'(photo)'),children:cv(c.children)}))})(n.children);
@@ -906,7 +931,7 @@ const bar=$('#nodeBar'),pop=$('#aiPop');let apOpen=null,apBusy=false,apWhere='be
 function placeBar(){const p=sel&&L.get(sel);const hidden=!p||editing||(drag&&drag.moved)||(drag&&drag.type==='pan');
  if(hidden){bar.style.display='none';if(apOpen&&!apBusy&&!p)closePop();return}
  const r=svg.getBoundingClientRect(),cx=view.x+p.x*view.z,top=view.y+(p.y-p.h/2)*view.z,bot=view.y+(p.y+p.h/2)*view.z;
- bar.style.display='flex';const above=top-48>4;bar.style.left=Math.min(Math.max(cx,120),r.width-120)+'px';bar.style.top=(above?top-46:bot+10)+'px';
+ $('#nbView').style.display=byId.get(sel)&&byId.get(sel).img?'':'none';bar.style.display='flex';const above=top-48>4;bar.style.left=Math.min(Math.max(cx,120),r.width-120)+'px';bar.style.top=(above?top-46:bot+10)+'px';
  if(apOpen===sel){pop.style.display='flex';pop.style.left=Math.min(Math.max(cx,180),r.width-180)+'px';const pt=above?bot+10:bot+56;pop.style.top=Math.min(pt,Math.max(8,r.height-pop.offsetHeight-8))+'px'}else if(apOpen&&!apBusy)closePop()}
 function openPop(){if(!sel)return;if(!S.key){openSettings();return}apOpen=sel;const n=byId.get(sel);$('#apNode').textContent=(n.text||'photo').split('\n')[0].replace(/^•\s*/,'').slice(0,60);$('#apStatus').hidden=true;$('#apIn').value='';placeBar();$('#apIn').focus()}
 function closePop(){apOpen=null;apBusy=false;pop.style.display='none'}
@@ -930,6 +955,31 @@ async function askBox(q,label){const n=byId.get(apOpen||sel);if(!n||apBusy)retur
   const cut=/\(Answer was cut short/.test(t);closePop();sel=n.id;render();ensureVisible(n.id);toast((where==='inside'?'Added inside the box':'Added below the box')+(cut?' – answer was cut short, ask a narrower question':' ✓')+'  (Undo to remove)')}
  catch(err){apBusy=false;st.className='err';st.textContent=err.message||String(err)}
  apBusy=false}
+
+/* ---------- Photo viewer ---------- */
+const vw=$('#viewer'),vst=$('#vStage'),vim=$('#vImg');let V={x:0,y:0,z:1,w:1,h:1},vPts=new Map(),vDrag=null,vPinch=null;
+function vApply(){vim.style.transform=`translate(${V.x}px,${V.y}px) scale(${V.z})`;$('#vPct').textContent=Math.round(V.z*100)+'%'}
+function vFit(){const r=vst.getBoundingClientRect();V.z=Math.min((r.width-40)/V.w,(r.height-40)/V.h,1.5);V.x=(r.width-V.w*V.z)/2;V.y=(r.height-V.h*V.z)/2;vApply()}
+function vZoom(cx,cy,f){const r=vst.getBoundingClientRect(),z=Math.max(.05,Math.min(12,V.z*f)),k=z/V.z,px=cx-r.left,py=cy-r.top;V.x=px-(px-V.x)*k;V.y=py-(py-V.y)*k;V.z=z;vApply()}
+function openViewer(id){const n=byId.get(id||sel);if(!n||!n.img||!doc.images[n.img])return;const I=doc.images[n.img];$('#vTitle').textContent=(n.text||'Photo').split('\n')[0].slice(0,80);
+ vim.onload=()=>{V.w=vim.naturalWidth;V.h=vim.naturalHeight;vim.style.width=V.w+'px';vim.style.height=V.h+'px';vFit()};vim.src=I.data;vw.classList.add('on');vw.dataset.id=n.id;$('#vClose').focus()}
+function closeViewer(){vw.classList.remove('on');vim.removeAttribute('src')}
+$('#vClose').onclick=closeViewer;$('#vFit').onclick=vFit;
+$('#v100').onclick=()=>{const r=vst.getBoundingClientRect();vZoom(r.left+r.width/2,r.top+r.height/2,1/V.z)};
+$('#vIn').onclick=()=>{const r=vst.getBoundingClientRect();vZoom(r.left+r.width/2,r.top+r.height/2,1.4)};
+$('#vOut').onclick=()=>{const r=vst.getBoundingClientRect();vZoom(r.left+r.width/2,r.top+r.height/2,1/1.4)};
+$('#vDl').onclick=()=>{const n=byId.get(vw.dataset.id);if(!n||!n.img)return;const a=document.createElement('a');a.href=doc.images[n.img].data;a.download=((n.text||'photo').split('\n')[0].replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'-').slice(0,50)||'photo')+'.jpg';document.body.appendChild(a);a.click();a.remove()};
+vst.addEventListener('wheel',e=>{e.preventDefault();vZoom(e.clientX,e.clientY,Math.exp(-e.deltaY*(e.ctrlKey?.01:.0018)))},{passive:false});
+vst.addEventListener('pointerdown',e=>{vPts.set(e.pointerId,{x:e.clientX,y:e.clientY});try{vst.setPointerCapture(e.pointerId)}catch(_){}
+ if(vPts.size===2){const [a,b]=[...vPts.values()];vPinch={d:Math.hypot(a.x-b.x,a.y-b.y),z:V.z};vDrag=null;return}vDrag={sx:e.clientX,sy:e.clientY,x:V.x,y:V.y};vst.classList.add('drag')});
+vst.addEventListener('pointermove',e=>{if(!vPts.has(e.pointerId))return;vPts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ if(vPinch&&vPts.size===2){const [a,b]=[...vPts.values()];vZoom((a.x+b.x)/2,(a.y+b.y)/2,(vPinch.z*Math.hypot(a.x-b.x,a.y-b.y)/vPinch.d)/V.z);return}
+ if(vDrag){V.x=vDrag.x+e.clientX-vDrag.sx;V.y=vDrag.y+e.clientY-vDrag.sy;vApply()}});
+const vEnd=e=>{vPts.delete(e.pointerId);if(vPts.size<2)vPinch=null;vDrag=null;vst.classList.remove('drag')};vst.addEventListener('pointerup',vEnd);vst.addEventListener('pointercancel',vEnd);
+vst.addEventListener('dblclick',e=>vZoom(e.clientX,e.clientY,2));
+document.addEventListener('keydown',e=>{if(!vw.classList.contains('on'))return;e.stopImmediatePropagation();if(e.key==='Escape')closeViewer();if(e.key==='+'||e.key==='=')$('#vIn').click();if(e.key==='-')$('#vOut').click();if(e.key==='0')vFit()},true);
+$('#nbView').onclick=()=>openViewer(sel);$('#fImgView').onclick=()=>openViewer(sel);
+$$('#fImgSize button').forEach(b=>b.onclick=()=>{const n=byId.get(sel);if(!n)return;act(()=>{if(b.dataset.v==='s')delete n.imgSize;else n.imgSize=b.dataset.v})});
 
 /* ---------- Boot ---------- */
 doc=load();$('#title').value=doc.title;index();render();updUndo();syncModelSel();refreshSide();setStatus('Saved in this browser',true);
