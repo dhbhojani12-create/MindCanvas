@@ -56,6 +56,22 @@ svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke
 .zoom .ib{width:32px;height:32px;font-size:18px}
 #zoomPct{font-size:13px;font-weight:500;width:48px;text-align:center}
 .hint{position:absolute;left:50%;transform:translateX(-50%);bottom:18px;font-size:12px;color:var(--mute);background:rgba(255,255,255,.85);padding:6px 12px;border-radius:20px;border:1px solid var(--line);white-space:nowrap;pointer-events:none}
+#nodeBar{position:absolute;z-index:6;display:none;transform:translateX(-50%);align-items:center;gap:4px;padding:4px 6px;background:#16181D;border-radius:10px;box-shadow:0 6px 16px rgba(22,24,29,.22)}
+#nodeBar button{white-space:nowrap;height:30px;min-width:30px;border:0;border-radius:7px;background:transparent;color:#fff;display:inline-flex;align-items:center;justify-content:center;gap:6px;font-size:13px;font-weight:600;padding:0 6px}
+#nodeBar button:hover{background:#2E323C}
+#nodeBar button.ai{background:#2F5BEA;padding:0 10px}
+#nodeBar button.ai:hover{background:#1E3FB8}
+#aiPop{position:absolute;z-index:7;display:none;transform:translateX(-50%);width:340px;max-width:calc(100% - 24px);background:#fff;border:1px solid #E4E6EB;border-radius:14px;box-shadow:0 16px 40px rgba(22,24,29,.22);padding:12px;flex-direction:column;gap:10px}
+#aiPop .t{font-size:12px;color:#5B6170;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#aiPop .t b{color:#16181D}
+#aiPop .chips{display:flex;flex-wrap:wrap;gap:6px}
+#aiPop .chips button{height:32px;padding:0 10px;border:1px solid #D5D9E0;background:#fff;border-radius:16px;font-size:12px;font-weight:500}
+#aiPop .chips button:hover{border-color:#2F5BEA;background:#F5F7FF}
+#aiPop .inrow{display:flex;gap:6px;align-items:flex-end;border:1px solid #D5D9E0;border-radius:10px;padding:6px 6px 6px 10px}
+#aiPop .inrow:focus-within{border-color:#2F5BEA}
+#aiPop textarea{flex:1;border:0;outline:0;resize:none;font-size:13px;max-height:100px;background:transparent}
+#aiPop .busy{font-size:13px;color:#3A3F4B;padding:6px 2px}
+#aiPop .err{font-size:12px;color:#B42318}
 #drop{position:absolute;inset:12px;border:3px dashed var(--blue);border-radius:16px;background:rgba(47,91,234,.06);display:none;align-items:center;justify-content:center;font-weight:600;color:var(--blue2);pointer-events:none;font-size:18px}
 #side{width:330px;flex-shrink:0;background:#fff;border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
 #side.hide{display:none}
@@ -216,6 +232,26 @@ dialog::backdrop{background:rgba(22,24,29,.45)}
  <main id="stage">
   <svg id="svg" aria-label="Mind map canvas"><g id="world"></g></svg>
   <textarea id="editor" aria-label="Edit node text" rows="1"></textarea>
+  <div id="nodeBar" role="toolbar" aria-label="Box actions">
+   <button type="button" class="ai" id="nbAI" title="Ask AI about this box"><svg class="i" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>Ask AI</button>
+   <button type="button" id="nbChild" aria-label="Add child" title="Add child (Tab)"><svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M12 5v14M5 12h14"/></svg></button>
+   <button type="button" id="nbEdit" aria-label="Edit text" title="Edit text"><svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>
+   <button type="button" id="nbImg" aria-label="Add image" title="Add image"><svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M21 16l-5-5-8 8"/></svg></button>
+  </div>
+  <form id="aiPop" aria-label="Ask AI about this box">
+   <div class="t">Ask about <b id="apNode"></b></div>
+   <div class="chips">
+    <button type="button" data-q="List the key points of this topic.">Key points</button>
+    <button type="button" data-q="Explain this simply, in short points.">Explain simply</button>
+    <button type="button" data-q="Give a short practical example with numbers.">Example</button>
+    <button type="button" data-q="List the conditions, exceptions and time limits that apply.">Conditions</button>
+   </div>
+   <div class="inrow"><textarea id="apIn" rows="2" placeholder="Ask anything about this box…"></textarea>
+    <button class="ib" type="submit" aria-label="Ask" style="background:#16181D;color:#fff;width:32px;height:32px;flex-shrink:0"><svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
+   <div class="row" style="justify-content:flex-start;gap:8px"><span class="small" style="font-size:12px">Put answer</span>
+    <div class="seg" id="apWhere" style="flex:1"><button type="button" data-v="below" aria-selected="true">New box below</button><button type="button" data-v="inside" aria-selected="false">Inside this box</button></div></div>
+   <div id="apStatus" hidden></div>
+  </form>
   <div id="drop">Drop image to add it to the map</div>
   <div class="zoom">
    <button class="ib" id="zOut" aria-label="Zoom out">−</button>
@@ -558,7 +594,7 @@ function drawNode(g,n,p,opts){const d=depthOf.get(n.id),x=p.x-p.w/2,y=p.y-p.h/2,
   else if(opts.interactive&&n.id===sel){const b=el('g',{class:'tog','data-tog':n.id},grp);el('circle',{cx,cy:p.y,r:9,fill:'#fff',stroke:p.color,'stroke-width':1.5},b);el('path',{d:`M${cx-4} ${p.y}h8`,stroke:p.color,'stroke-width':2,'stroke-linecap':'round'},b)}}}
 
 function render(){index();L=layout();world.replaceChildren();draw(world,L,{interactive:true});applyView()}
-function applyView(){world.setAttribute('transform',`translate(${view.x} ${view.y}) scale(${view.z})`);$('#zoomPct').textContent=Math.round(view.z*100)+'%';if(editing)placeEditor()}
+function applyView(){world.setAttribute('transform',`translate(${view.x} ${view.y}) scale(${view.z})`);$('#zoomPct').textContent=Math.round(view.z*100)+'%';if(editing)placeEditor();placeBar()}
 function bounds(P,only){let a=Infinity,b=Infinity,c=-Infinity,d=-Infinity;for(const [id,p] of P){if(only&&!only.has(id))continue;a=Math.min(a,p.x-p.w/2-24);b=Math.min(b,p.y-p.h/2-14);c=Math.max(c,p.x+p.w/2+24);d=Math.max(d,p.y+p.h/2+14)}return {x:a,y:b,w:c-a,h:d-b}}
 function fit(){const r=svg.getBoundingClientRect(),B=bounds(L);const z=Math.max(.15,Math.min(1.4,Math.min(r.width/B.w,r.height/B.h)*.9));view.z=z;view.x=r.width/2-(B.x+B.w/2)*z;view.y=r.height/2-(B.y+B.h/2)*z;applyView()}
 function zoomAt(cx,cy,f){const r=svg.getBoundingClientRect(),z=Math.max(.15,Math.min(3,view.z*f)),k=z/view.z;const px=cx-r.left,py=cy-r.top;view.x=px-(px-view.x)*k;view.y=py-(py-view.y)*k;view.z=z;applyView()}
@@ -575,7 +611,7 @@ function placeEditor(){const p=L.get(editing.id);if(!p){cancelEdit();return}cons
 function startEdit(id,initial){const n=byId.get(id);if(!n)return;ensureVisible(id);editing={id,orig:n.text};ed.value=initial??n.text;ed.style.display='block';placeEditor();ed.focus();if(initial==null)ed.select();else{ed.selectionStart=ed.selectionEnd=ed.value.length}}
 function commitEdit(){if(!editing)return;const e=editing;editing=null;ed.style.display='none';const n=byId.get(e.id);if(!n)return;const v=ed.value.replace(/\s+$/,'').replace(/^\s+/,'');
  if(v&&v!==e.orig||!v&&n.img&&e.orig){act(()=>{n.text=v})}else if(!n.text&&!n.img){n.text='New idea';changed()}svg.focus({preventScroll:true})}
-function cancelEdit(){if(!editing)return;const e=editing;editing=null;ed.style.display='none';const n=byId.get(e.id);if(n&&!n.text&&!n.img){n.text='New idea';changed()}}
+function cancelEdit(){if(!editing)return;const e=editing;editing=null;ed.style.display='none';placeBar();const n=byId.get(e.id);if(n&&!n.text&&!n.img){n.text='New idea';changed()}}
 ed.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();commitEdit()}else if(e.key==='Escape'){e.preventDefault();cancelEdit()}else if(e.key==='Tab'){e.preventDefault();commitEdit();addChild()}e.stopPropagation()});
 ed.addEventListener('input',()=>{if(editing){ed.style.height='auto';ed.style.height=ed.scrollHeight+'px'}});
 ed.addEventListener('blur',()=>setTimeout(()=>{if(editing&&document.activeElement!==ed)commitEdit()},0));
@@ -616,7 +652,7 @@ stage.addEventListener('drop',async e=>{e.preventDefault();dragDepth=0;$('#drop'
 /* ---------- Pointer: pan, drag, pinch ---------- */
 const pts=new Map();let drag=null,pinch=null;
 svg.tabIndex=0;
-svg.addEventListener('pointerdown',e=>{if(editing)commitEdit();pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+svg.addEventListener('pointerdown',e=>{if(editing)commitEdit();if(apOpen&&!apBusy)closePop();pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
  if(pts.size===2){const [a,b]=[...pts.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),z:view.z};if(drag&&drag.moved&&drag.type==='node')finishDrag(null);drag=null;return}
  const tog=e.target.closest('[data-tog]'),lk=e.target.closest('[data-link]'),nd=e.target.closest('[data-id]');
  if(tog){toggleCollapse(tog.getAttribute('data-tog'));return}
@@ -638,7 +674,7 @@ function finishDrag(e){const n=byId.get(drag.id);
   if(t===doc.root&&e){n.side=toWorld(e.clientX,e.clientY).x>=(L.get(t.id).x)?'R':'L'}t.collapsed=false;t.children.push(n);toast('Moved under “'+(t.text||'node').slice(0,30)+'”')}
  else if(depthOf.get(n.id)===1){const p=L.get(n.id),rp=L.get(doc.root.id);if((n.side==='R'&&p.x<rp.x)||(n.side==='L'&&p.x>rp.x)){n.side=n.side==='R'?'L':'R';delete n.dx;delete n.dy}}
  dropTarget=null;changed()}
-function endPtr(e){pts.delete(e.pointerId);if(pts.size<2)pinch=null;svg.classList.remove('panning');if(!drag)return;if(drag.type==='node'&&drag.moved)finishDrag(e);drag=null}
+function endPtr(e){pts.delete(e.pointerId);if(pts.size<2)pinch=null;svg.classList.remove('panning');if(!drag)return;if(drag.type==='node'&&drag.moved)finishDrag(e);drag=null;placeBar()}
 svg.addEventListener('pointerup',endPtr);svg.addEventListener('pointercancel',endPtr);
 svg.addEventListener('dblclick',e=>{const w=toWorld(e.clientX,e.clientY);let hit=null;for(const [id,p] of L){if(Math.abs(w.x-p.x)<=p.w/2&&Math.abs(w.y-p.y)<=p.h/2){hit=id}}if(hit){sel=hit;startEdit(hit)}else{sel=doc.root.id;addChild()}});
 svg.addEventListener('wheel',e=>{e.preventDefault();if(e.ctrlKey||!e.shiftKey&&Math.abs(e.deltaX)<1&&e.deltaMode!==0||!e.shiftKey&&Math.abs(e.deltaY)>=50&&Math.abs(e.deltaX)<1){zoomAt(e.clientX,e.clientY,Math.exp(-e.deltaY*(e.ctrlKey?.01:.0015)))}else{view.x-=e.deltaX;view.y-=e.deltaY;applyView()}},{passive:false});
@@ -864,6 +900,36 @@ $$('[data-ai]').forEach(btn=>btn.onclick=()=>{const a=btn.dataset.ai;if(!S.key){
 $('#btnClearChat').onclick=()=>clearChat();
 $('#askForm').onsubmit=e=>{e.preventDefault();const q=$('#askIn').value.trim();if(!q)return;if(!S.key){openSettings();return}$('#askIn').value='';freeAsk(q)};
 $('#askIn').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('#askForm').requestSubmit()}});
+
+/* ---------- Ask AI on a box ---------- */
+const bar=$('#nodeBar'),pop=$('#aiPop');let apOpen=null,apBusy=false,apWhere='below';
+function placeBar(){const p=sel&&L.get(sel);const hidden=!p||editing||(drag&&drag.moved)||(drag&&drag.type==='pan');
+ if(hidden){bar.style.display='none';if(apOpen&&!apBusy&&!p)closePop();return}
+ const r=svg.getBoundingClientRect(),cx=view.x+p.x*view.z,top=view.y+(p.y-p.h/2)*view.z,bot=view.y+(p.y+p.h/2)*view.z;
+ bar.style.display='flex';const above=top-48>4;bar.style.left=Math.min(Math.max(cx,120),r.width-120)+'px';bar.style.top=(above?top-46:bot+10)+'px';
+ if(apOpen===sel){pop.style.display='flex';pop.style.left=Math.min(Math.max(cx,180),r.width-180)+'px';const pt=above?bot+10:bot+56;pop.style.top=Math.min(pt,Math.max(8,r.height-pop.offsetHeight-8))+'px'}else if(apOpen&&!apBusy)closePop()}
+function openPop(){if(!sel)return;if(!S.key){openSettings();return}apOpen=sel;const n=byId.get(sel);$('#apNode').textContent=(n.text||'photo').split('\n')[0].replace(/^•\s*/,'').slice(0,60);$('#apStatus').hidden=true;$('#apIn').value='';placeBar();$('#apIn').focus()}
+function closePop(){apOpen=null;apBusy=false;pop.style.display='none'}
+$('#nbAI').onclick=()=>apOpen===sel?closePop():openPop();
+$('#nbChild').onclick=()=>addChild();$('#nbEdit').onclick=()=>{if(sel)startEdit(sel)};$('#nbImg').onclick=()=>{if(sel)pickImage('child')};
+$$('#apWhere button').forEach(b=>b.onclick=()=>{apWhere=b.dataset.v;$$('#apWhere button').forEach(x=>x.setAttribute('aria-selected',x===b))});
+$$('#aiPop .chips button').forEach(b=>b.onclick=()=>askBox(b.dataset.q,b.textContent));
+pop.onsubmit=e=>{e.preventDefault();const q=$('#apIn').value.trim();if(q)askBox(q,q)};
+$('#apIn').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();pop.requestSubmit()}if(e.key==='Escape')closePop()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&apOpen&&!apBusy)closePop()});
+function pathTo(n){const out=[];let x=n;while(x){out.unshift((x.text||'photo').split('\n')[0]);x=parentOf.get(x.id)}return out.join(' > ')}
+async function askBox(q,label){const n=byId.get(apOpen||sel);if(!n||apBusy)return;apBusy=true;const st=$('#apStatus');st.hidden=false;st.className='busy';st.replaceChildren();const sp=document.createElement('span');sp.className='dots';sp.textContent='Asking Gemini';st.appendChild(sp);
+ const where=apWhere;
+ try{const t=await gemini([{text:`You help fill in a mind map.\nWhole map:\n${outline()}\n\nThe user is asking about this box: "${n.text||'photo'}"\nIts place in the map: ${pathTo(n)}\n\nRequest: ${q}\n\nAnswer ONLY about this box, in its context. Put each point on its own line starting with "- ", and "  - " for a sub-point. Keep each point to one or two sentences. No headings, no bold, no intro or closing sentence. Do not repeat what the box already says.`}]);
+  const lines=parseAnswer(t);if(!lines.length)throw new Error('No answer came back. Try again.');const shown=lines.map(showLine).join('\n');
+  if(!byId.has(n.id))throw new Error('That box was deleted.');
+  act(()=>{n.collapsed=false;
+   if(where==='inside'){n.text=(n.text?n.text.replace(/\s+$/,'')+'\n':'')+shown}
+   else if(S.addAs==='many'){let last=null;for(const x of lines){const k=newNode(x.text.slice(0,600));if(x.lvl&&last)last.children.push(k);else{n.children.push(k);last=k}}}
+   else n.children.push(newNode(shown))});
+  const cut=/\(Answer was cut short/.test(t);closePop();sel=n.id;render();ensureVisible(n.id);toast((where==='inside'?'Added inside the box':'Added below the box')+(cut?' – answer was cut short, ask a narrower question':' ✓')+'  (Undo to remove)')}
+ catch(err){apBusy=false;st.className='err';st.textContent=err.message||String(err)}
+ apBusy=false}
 
 /* ---------- Boot ---------- */
 doc=load();$('#title').value=doc.title;index();render();updUndo();syncModelSel();refreshSide();setStatus('Saved in this browser',true);
