@@ -794,10 +794,10 @@ $('#setSave').onclick=async()=>{const k=$('#keyIn').value.trim();if(k&&k!==S.key
  S.key=k;S.models=k?tmpModels:[];const ch=document.querySelector('#modelList input:checked');S.model=ch?ch.value:recommended()||'';S.fallback=$('#fallbackChk').checked;saveS();syncModelSel();$('#dSet').close();toast(k?'AI ready ✓':'AI key removed')};
 const label=id=>(S.models.find(m=>m.id===id)||{label:id}).label;
 async function gemini(parts,json){if(!S.key||!S.model){openSettings();throw new Error('Add your free Gemini API key first (AI settings).')}
- let model=S.model;for(let a=0;a<2;a++){const r=await fetch(API+model+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':S.key},body:JSON.stringify({contents:[{role:'user',parts}],generationConfig:json?{responseMimeType:'application/json',temperature:.7}:{temperature:.7}})});
+ let model=S.model;for(let a=0;a<2;a++){const r=await fetch(API+model+':generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':S.key},body:JSON.stringify({contents:[{role:'user',parts}],generationConfig:json?{responseMimeType:'application/json',temperature:.3,maxOutputTokens:16384}:{temperature:.3,maxOutputTokens:16384}})});
   if(r.status===429&&a===0&&S.fallback!==false){const lite=bestOf('lite');if(lite&&lite!==model){model=lite;S.model=lite;saveS();syncModelSel();bubble('note','Free limit reached on that model – switched to '+label(lite)+'.');continue}}
   if(!r.ok){const m=await errMsg(r);throw new Error(r.status===429?'Free limit reached for now. Try another model or wait a bit. ('+m+')':m)}
-  const j=await r.json();const t=((j.candidates&&j.candidates[0]&&j.candidates[0].content&&j.candidates[0].content.parts)||[]).map(p=>p.text||'').join('');if(!t)throw new Error('No answer came back (it may have been blocked). Try rephrasing.');return t}}
+  const j=await r.json();const cand=j.candidates&&j.candidates[0];const t=((cand&&cand.content&&cand.content.parts)||[]).filter(p=>!p.thought).map(p=>p.text||'').join('');if(cand&&cand.finishReason==='MAX_TOKENS'){if(json)throw new Error('The answer was too long and got cut off. Ask for fewer points or a smaller topic.');return t+'\n\n(Answer was cut short – ask a narrower question for the rest.)'}if(!t)throw new Error('No answer came back (it may have been blocked). Try rephrasing.');return t}}
 function parseJSON(t){t=t.trim().replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'');try{return JSON.parse(t)}catch(_){const m=t.match(/[\[{][\s\S]*[\]}]/);if(m)return JSON.parse(m[0]);throw new Error('The AI reply wasn’t in the expected format. Try again.')}}
 function outline(){const out=[];let len=0;(function w(n,d){if(len>6000)return;const l='  '.repeat(d)+'- '+(n.text||'(photo)').replace(/\n/g,' ');out.push(l);len+=l.length;n.children.forEach(c=>w(c,d+1))})(doc.root,0);return out.join('\n')}
 const chat=$('#chat');
@@ -842,11 +842,23 @@ async function photoMap(nid){const n=byId.get(nid||sel);if(!n||!n.img||!doc.imag
   clearChat('Read the photo and added '+unitWord(count)+' ✓');ensureVisible(n.id)}catch(err){failed(b,err)}}
 // when user picks a file for AI photo mapping
 const origImgChange=$('#fileImg').onchange;$('#fileImg').onchange=async e=>{if(imgMode!=='ai')return origImgChange(e);const f=e.target.files[0];e.target.value='';if(!f)return;try{const r=await imageFromFile(f);const nid=await placeImage(r,'child');photoMap(nid)}catch(err){toast(err.message)}};
+function parseAnswer(t){const out=[];for(const raw of t.replace(/\r/g,'').split('\n')){if(!raw.trim())continue;if(/^\(Answer was cut short/.test(raw.trim()))continue;
+  const l=raw.replace(/\*\*|__|`/g,'').replace(/^\s*#{1,6}\s*/,'');const m=l.match(/^(\s*)(?:[-*•]|\d+[.)])\s+(.*)$/);
+  if(m)out.push({lvl:m[1].replace(/\t/g,'  ').length>=2?1:0,text:m[2].trim(),b:true});
+  else if(out.length&&/^\s+/.test(raw)&&out[out.length-1].b)out[out.length-1].text+=' '+l.trim();
+  else out.push({lvl:0,text:l.trim(),b:false})}
+ if(out.length>1&&!out[0].b&&/:\s*$/.test(out[0].text)&&out.slice(1).some(x=>x.b))out.shift();
+ return out}
+const showLine=x=>x.b?(x.lvl?'   – ':'• ')+x.text:x.text;
 async function freeAsk(q){bubble('me',q);const b=thinking();const n=aiTarget();
- try{const t=await gemini([{text:`You are an assistant inside a mind map app. The user's map:\n${outline()}\n\nSelected node: "${n.text||'photo'}".\nAnswer briefly and clearly. If you suggest new ideas, put each on its own line starting with "- ".\n\nUser: ${q}`}]);
-  b.replaceChildren(document.createTextNode(t.trim()));const items=[];let inList=false;for(const raw of t.split('\n')){const l=raw.replace(/\*\*/g,'');const m=l.match(/^\s*(?:[-*•]|\d+[.)])\s+(.+)/);if(m){items.push(m[1].trim());inList=true}else if(inList&&l.trim()&&/^\s+/.test(raw)){items[items.length-1]+=' '+l.trim()}else if(!l.trim()){}else inList=false}
-  if(items.length){const acts=document.createElement('div');acts.className='acts';const add=document.createElement('button');add.className='btn';add.textContent=(S.addAs==='many'?'Add '+items.length+' as nodes':'Add as one box')+' under “'+(n.text||'photo').slice(0,24)+'”';
-   add.onclick=()=>{if(!byId.has(n.id))return;act(()=>{n.collapsed=false;addAI(n,items)});clearChat('Added to “'+(n.text||'photo').slice(0,30)+'” ✓')};acts.appendChild(add);b.appendChild(acts)}}
+ try{const t=await gemini([{text:`You are an assistant inside a mind map app. The user's map:\n${outline()}\n\nSelected node: "${n.text||'photo'}".\nAnswer clearly and completely. Put each point on its own line starting with "- ". Use "  - " for a sub-point. No headings, no bold, no intro or closing sentence.\n\nUser: ${q}`}]);
+  const lines=parseAnswer(t);const shown=lines.map(showLine).join('\n');
+  b.replaceChildren(document.createTextNode(shown||t.trim()));if(/\(Answer was cut short/.test(t)){const w=document.createElement('span');w.className='small';w.style.color='#B42318';w.textContent='Answer was cut short – ask a narrower question for the rest.';b.appendChild(w)}
+  if(lines.length){const acts=document.createElement('div');acts.className='acts';const add=document.createElement('button');add.className='btn pri';
+   const tops=lines.filter(x=>!x.lvl).length;add.textContent=(S.addAs==='many'?'Add '+tops+' as nodes':'Add all as one box')+' under “'+(n.text||'photo').slice(0,24)+'”';
+   add.onclick=()=>{if(!byId.has(n.id)){toast('That node no longer exists');return}
+    act(()=>{n.collapsed=false;if(S.addAs==='many'){let last=null;for(const x of lines){const k=newNode(x.text.slice(0,600));if(x.lvl&&last)last.children.push(k);else{n.children.push(k);last=k}}}else n.children.push(newNode(shown))});
+    clearChat('Added to “'+(n.text||'photo').slice(0,30)+'” ✓')};acts.appendChild(add);b.appendChild(acts)}}
  catch(err){failed(b,err)}}
 $$('[data-ai]').forEach(btn=>btn.onclick=()=>{const a=btn.dataset.ai;if(!S.key){openSettings();return}if(a==='expand')expand();else if(a==='summary')summary();else if(a==='topic')topicMap();else if(a==='photo')photoMap()});
 $('#btnClearChat').onclick=()=>clearChat();
