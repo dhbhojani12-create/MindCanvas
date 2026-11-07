@@ -257,6 +257,7 @@ dialog::backdrop{background:rgba(22,24,29,.45)}
     <button data-ai="topic">Map from topic</button>
    </div>
    <div id="chat"></div>
+   <button type="button" class="btn" id="btnClearChat" style="align-self:center;height:32px;font-size:12px">Clear chat</button>
   </div>
 
   <div class="pane" id="paneStyle" hidden>
@@ -801,6 +802,7 @@ function parseJSON(t){t=t.trim().replace(/^```(?:json)?\s*/i,'').replace(/```\s*
 function outline(){const out=[];let len=0;(function w(n,d){if(len>6000)return;const l='  '.repeat(d)+'- '+(n.text||'(photo)').replace(/\n/g,' ');out.push(l);len+=l.length;n.children.forEach(c=>w(c,d+1))})(doc.root,0);return out.join('\n')}
 const chat=$('#chat');
 function bubble(kind,text){const b=document.createElement('div');b.className='bub '+kind;if(text!=null){const s=document.createElement('span');s.textContent=text;b.appendChild(s)}chat.appendChild(b);b.scrollIntoView({block:'end',behavior:'smooth'});return b}
+function clearChat(msg){chat.replaceChildren();$('#askIn').value='';if(msg)toast(msg)}
 function thinking(){const b=bubble('ai');const s=document.createElement('span');s.className='dots';s.textContent='Thinking';b.appendChild(s);return b}
 function failed(b,err){b.className='bub err';b.replaceChildren(document.createTextNode(err.message||String(err)))}
 function addTree(parent,items,depth=0){let c=0;if(!Array.isArray(items)||depth>4)return 0;for(const it of items.slice(0,25)){const t=typeof it==='string'?it:(it&&(it.text||it.title||it.name));if(!t)continue;const n=newNode(String(t).slice(0,400));parent.children.push(n);c++;if(it&&typeof it==='object')c+=addTree(n,it.children||it.subtopics||[],depth+1)}return c}
@@ -823,7 +825,7 @@ async function expand(){const n=aiTarget();bubble('me','Suggest sub-topics for �
   b.replaceChildren();const h=document.createElement('span');h.textContent='Pick the ideas to add under “'+(n.text||'photo')+'”:';b.appendChild(h);
   const boxes=list.map(t=>{const l=document.createElement('label');l.className='pick';const c=document.createElement('input');c.type='checkbox';c.checked=true;l.append(c,document.createTextNode(String(t).slice(0,400)));b.appendChild(l);return {c,t}});
   const acts=document.createElement('div');acts.className='acts';const add=document.createElement('button');add.className='btn pri';const upd=()=>{const k=boxes.filter(x=>x.c.checked).length;add.textContent=S.addAs==='many'?'Add '+k+' to map':'Add '+k+' in one box';add.disabled=!k};upd();boxes.forEach(x=>x.c.onchange=upd);
-  add.onclick=()=>{const pick=boxes.filter(x=>x.c.checked).map(x=>x.t);if(!byId.has(n.id)){toast('That node no longer exists');return}act(()=>{n.collapsed=false;addAI(n,pick)});add.disabled=true;add.textContent='Added ✓'};
+  add.onclick=()=>{const pick=boxes.filter(x=>x.c.checked).map(x=>x.t);if(!byId.has(n.id)){toast('That node no longer exists');return}act(()=>{n.collapsed=false;addAI(n,pick)});clearChat('Added to “'+(n.text||'photo').slice(0,30)+'” ✓')};
   const again=document.createElement('button');again.className='btn';again.textContent='Regenerate';again.onclick=()=>{sel=n.id;expand()};acts.append(add,again);b.appendChild(acts)}
  catch(err){failed(b,err)}}
 async function summary(){bubble('me','Summarise my map');const b=thinking();try{const t=await gemini([{text:`Summarise this mind map in 4 to 6 short bullet points using "•", then one line with the single most important next step.\n\n${outline()}`}]);b.replaceChildren(document.createTextNode(t.trim()))}catch(err){failed(b,err)}}
@@ -832,21 +834,22 @@ async function topicMap(){const q=$('#askIn').value.trim();const n=aiTarget();co
  try{const j=parseJSON(await gemini([{text:`Create a mind map about "${topic}". Return ONLY JSON: {"text": "<central topic, max 6 words>", "children": [{"text": "...", "children": [{"text":"..."}]}]}. 4 to 7 main branches, 2 to 4 sub-points each, max 3 levels, each label max 7 words.`}],true));
   const kids=j.children||(Array.isArray(j)?j:[]);let count=0;
   act(()=>{const isBlank=doc.root.children.length===0;const target=isBlank?doc.root:n;if(isBlank&&j.text){doc.root.text=String(j.text).slice(0,120);if(doc.title==='Untitled map'){doc.title=doc.root.text;$('#title').value=doc.title}}target.collapsed=false;count=addAI(target,kids)});
-  b.replaceChildren(document.createTextNode('Added '+unitWord(count)+' under “'+(byId.get(n.id)?n.text:doc.root.text)+'”. Use Undo if you don’t like them.'));setTimeout(fit,50)}catch(err){failed(b,err)}}
+  clearChat('Added '+unitWord(count)+' ✓ (Undo to remove)');setTimeout(fit,50)}catch(err){failed(b,err)}}
 async function photoMap(nid){const n=byId.get(nid||sel);if(!n||!n.img||!doc.images[n.img]){if(!sel)sel=doc.root.id;toast('Choose a photo of notes, a whiteboard or a page');imgMode='ai';$('#fileImg').click();return}
  bubble('me','Turn this photo into a mind map');const b=thinking();const I=doc.images[n.img];const m=I.data.match(/^data:(image\/[a-z]+);base64,(.*)$/);
  try{const j=parseJSON(await gemini([{inline_data:{mime_type:m[1],data:m[2]}},{text:'Read this image (notes, a whiteboard, a textbook page or a diagram). Turn its content into a mind map. Return ONLY JSON: {"text": "<main topic, max 6 words>", "children": [{"text":"...", "children":[{"text":"..."}]}]}. Keep labels short (max 7 words). Max 3 levels.'}],true));
   let count=0;act(()=>{if(!n.text&&j.text)n.text=String(j.text).slice(0,120);n.collapsed=false;count=addAI(n,j.children||[])});
-  b.replaceChildren(document.createTextNode('Read the photo and added '+unitWord(count)+' under “'+(n.text||'photo')+'”.'));ensureVisible(n.id)}catch(err){failed(b,err)}}
+  clearChat('Read the photo and added '+unitWord(count)+' ✓');ensureVisible(n.id)}catch(err){failed(b,err)}}
 // when user picks a file for AI photo mapping
 const origImgChange=$('#fileImg').onchange;$('#fileImg').onchange=async e=>{if(imgMode!=='ai')return origImgChange(e);const f=e.target.files[0];e.target.value='';if(!f)return;try{const r=await imageFromFile(f);const nid=await placeImage(r,'child');photoMap(nid)}catch(err){toast(err.message)}};
 async function freeAsk(q){bubble('me',q);const b=thinking();const n=aiTarget();
  try{const t=await gemini([{text:`You are an assistant inside a mind map app. The user's map:\n${outline()}\n\nSelected node: "${n.text||'photo'}".\nAnswer briefly and clearly. If you suggest new ideas, put each on its own line starting with "- ".\n\nUser: ${q}`}]);
   b.replaceChildren(document.createTextNode(t.trim()));const items=[];let inList=false;for(const raw of t.split('\n')){const l=raw.replace(/\*\*/g,'');const m=l.match(/^\s*(?:[-*•]|\d+[.)])\s+(.+)/);if(m){items.push(m[1].trim());inList=true}else if(inList&&l.trim()&&/^\s+/.test(raw)){items[items.length-1]+=' '+l.trim()}else if(!l.trim()){}else inList=false}
   if(items.length){const acts=document.createElement('div');acts.className='acts';const add=document.createElement('button');add.className='btn';add.textContent=(S.addAs==='many'?'Add '+items.length+' as nodes':'Add as one box')+' under “'+(n.text||'photo').slice(0,24)+'”';
-   add.onclick=()=>{if(!byId.has(n.id))return;act(()=>{n.collapsed=false;addAI(n,items)});add.disabled=true;add.textContent='Added ✓'};acts.appendChild(add);b.appendChild(acts)}}
+   add.onclick=()=>{if(!byId.has(n.id))return;act(()=>{n.collapsed=false;addAI(n,items)});clearChat('Added to “'+(n.text||'photo').slice(0,30)+'” ✓')};acts.appendChild(add);b.appendChild(acts)}}
  catch(err){failed(b,err)}}
 $$('[data-ai]').forEach(btn=>btn.onclick=()=>{const a=btn.dataset.ai;if(!S.key){openSettings();return}if(a==='expand')expand();else if(a==='summary')summary();else if(a==='topic')topicMap();else if(a==='photo')photoMap()});
+$('#btnClearChat').onclick=()=>clearChat();
 $('#askForm').onsubmit=e=>{e.preventDefault();const q=$('#askIn').value.trim();if(!q)return;if(!S.key){openSettings();return}$('#askIn').value='';freeAsk(q)};
 $('#askIn').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('#askForm').requestSubmit()}});
 
